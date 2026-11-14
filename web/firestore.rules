@@ -1,0 +1,12 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Varje lista nås bara av den som känner till dess långa, slumpade id (delningslänken).
+    match /lists/{listId}/{coll}/{docId} {
+      allow read, delete: if listId.size() >= 20 && coll in ['items', 'base', 'eans'];
+      allow create, update: if listId.size() >= 20
+        && coll in ['items', 'base', 'eans']
+        && request.resource.data.keys().size() <= 10;
+    }
+  }
+}

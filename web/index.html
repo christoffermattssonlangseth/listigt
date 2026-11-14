@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#2f7d4f">
+  <title>Listigt</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <div class="title-row">
+      <h1>Listigt</h1>
+      <button id="share-btn" aria-label="Dela listan">Dela</button>
+    </div>
+    <nav>
+      <button class="tab active" data-view="list">Inköpslista</button>
+      <button class="tab" data-view="base">Basvaror</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- Lista A -->
+    <section id="view-list" class="view active">
+      <form id="add-form" class="add-row" autocomplete="off">
+        <input id="add-input" type="text" placeholder="Lägg till vara…" list="suggestions" enterkeyhint="done">
+        <button type="submit" aria-label="Lägg till">＋</button>
+        <button type="button" class="scan-btn" data-target="list" aria-label="Scanna streckkod">
+          <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M2 4h2v16H2zm3 0h1v16H5zm2 0h2v16H7zm3 0h1v16h-1zm3 0h2v16h-2zm3 0h1v16h-1zm2 0h1v16h-1zm2 0h2v16h-2z"/></svg>
+        </button>
+      </form>
+      <datalist id="suggestions"></datalist>
+
+      <ul id="list" class="items"></ul>
+      <p id="list-empty" class="empty">Listan är tom.</p>
+
+      <div class="actions">
+        <button id="clear-checked" class="secondary">Ta bort avbockade</button>
+        <button id="new-round" class="primary">Ny inköpsrunda</button>
+      </div>
+      <p class="hint">”Ny inköpsrunda” tar bort avbockade varor och lägger till alla basvaror som saknas.</p>
+    </section>
+
+    <!-- Lista B -->
+    <section id="view-base" class="view">
+      <form id="base-form" class="add-row" autocomplete="off">
+        <input id="base-input" type="text" placeholder="Ny basvara…" enterkeyhint="done">
+        <button type="submit" aria-label="Lägg till basvara">＋</button>
+        <button type="button" class="scan-btn" data-target="base" aria-label="Scanna streckkod">
+          <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M2 4h2v16H2zm3 0h1v16H5zm2 0h2v16H7zm3 0h1v16h-1zm3 0h2v16h-2zm3 0h1v16h-1zm2 0h1v16h-1zm2 0h2v16h-2z"/></svg>
+        </button>
+      </form>
+      <ul id="base" class="items"></ul>
+      <p id="base-empty" class="empty">Inga basvaror än. Basvaror läggs automatiskt till på inköpslistan.</p>
+    </section>
+  </main>
+
+  <!-- Scanner -->
+  <dialog id="scanner">
+    <div class="scanner-wrap">
+      <video id="video" playsinline muted></video>
+      <div class="frame"></div>
+    </div>
+    <p id="scan-status">Rikta kameran mot streckkoden…</p>
+    <form id="manual-ean" class="add-row">
+      <input id="manual-ean-input" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="…eller skriv EAN-koden">
+      <button type="submit">OK</button>
+    </form>
+    <button id="scan-close" class="secondary wide">Stäng</button>
+  </dialog>
+
+  <!-- Delning -->
+  <dialog id="share">
+    <h2>Dela listan</h2>
+    <p id="share-text"></p>
+    <input id="share-link" readonly onclick="this.select()">
+    <div class="actions">
+      <button id="share-close" class="secondary">Stäng</button>
+      <button id="share-go" class="primary">Skicka länk</button>
+    </div>
+  </dialog>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js" defer></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
