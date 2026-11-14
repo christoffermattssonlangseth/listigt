@@ -42,6 +42,42 @@ final class AppModel: ObservableObject {
             }
             _ = addBase("Mjölk", quantity: Quantity(amount: 3, unit: .l))
         }
+        if ProcessInfo.processInfo.arguments.contains("-demoMenu"), (household?.menuDishes ?? []).isEmpty {
+            func ing(_ n: String, _ a: Double, _ u: String, pantry: Bool = false, offer: String = "") -> MenuIngredient {
+                MenuIngredient(name: n, amount: a, unit: u, pantry: pantry, offer: offer)
+            }
+            replaceMenu(with: [
+                PlannedDish(title: "Krämig kycklinggryta med ris", description: "Mild gryta med paprika och grädde.",
+                            days: 2, servings: 8, minutes: 35,
+                            ingredients: [ing("Kycklingfilé", 1.2, "kg", offer: "Willys: 89,90/kg"),
+                                          ing("Matlagningsgrädde", 5, "dl", offer: "ICA: 2 för 25 kr"),
+                                          ing("Paprika", 2, "st"), ing("Gul lök", 1, "st"), ing("Ris", 6, "dl"),
+                                          ing("Salt", 0, "", pantry: true), ing("Olja", 2, "dl", pantry: true)],
+                            steps: ["Skär kycklingen i bitar och bryn i olja.", "Tillsätt lök och paprika.",
+                                    "Häll på grädden och låt puttra 15 minuter.", "Servera med ris."]),
+                PlannedDish(title: "Fiskpinnar med potatismos", description: "Snabbt och barnvänligt.",
+                            days: 1, servings: 4, minutes: 25,
+                            ingredients: [ing("Fiskpinnar", 1, "st", offer: "Willys: 39,90/st"), ing("Potatis", 1, "kg")],
+                            steps: ["Koka potatisen.", "Stek fiskpinnarna.", "Mosa potatisen med mjölk och smör."]),
+            ])
+        }
+        if ProcessInfo.processInfo.arguments.contains("-demoHistory"), let h = household, (h.purchases ?? []).isEmpty {
+            let day: TimeInterval = 86_400
+            let trips: [(Double, [String])] = [
+                (1.2, ["Mjölk", "Bröd", "Kaffe", "Bananer", "Kvarg"]),
+                (4.9, ["Mjölk", "Ost", "Bananer", "Tvättservetter"]),
+                (8.1, ["Mjölk", "Bröd", "Bananer", "Kvarg", "Köttfärs", "Tacoskal"]),
+                (12.0, ["Mjölk", "Kaffe", "Kvarg", "Pasta"]),
+            ]
+            for (ago, names) in trips {
+                for (i, n) in names.enumerated() {
+                    let p = ctx.insert(Purchase.self, into: h.objectID.persistentStore)
+                    p.name = n; p.quantity = .one; p.household = h
+                    p.date = Date().addingTimeInterval(-ago * day + Double(i) * 90)
+                }
+            }
+            save()
+        }
         if ProcessInfo.processInfo.arguments.contains("-demoIntervals"), let h = household {
             let day: TimeInterval = 86_400
             for b in h.baseItems ?? [] {
@@ -124,6 +160,11 @@ final class AppModel: ObservableObject {
             let n = ctx.insert(CategoryChoice.self, into: store)
             n.key = c.key; n.category = c.category; n.household = dst
         }
+        for p in src.purchases ?? [] {
+            let n = ctx.insert(Purchase.self, into: store)
+            n.name = p.name; n.ean = p.ean; n.amount = p.amount; n.unit = p.unit; n.date = p.date
+            n.household = dst
+        }
     }
 
     // MARK: Inköpslistan
@@ -152,7 +193,79 @@ final class AppModel: ObservableObject {
         save()
     }
 
-    func toggle(_ item: ShopItem) { item.checked.toggle(); save() }
+    func toggle(_ item: ShopItem) {
+        item.checked.toggle()
+        if item.checked { recordPurchase(of: item) } else { undoPurchase(of: item) }
+        save()
+    }
+
+    // MARK: Köphistorik
+
+    private func recordPurchase(of item: ShopItem) {
+        guard let h = household else { return }
+        let p = ctx.insert(Purchase.self, into: h.objectID.persistentStore)
+        p.name = item.name
+        p.ean = item.ean
+        p.quantity = item.quantity
+        p.date = Date()
+        p.household = h
+    }
+
+    /// Avbockning ångrad: ta bort den senaste registreringen av varan (inom samma tillfälle).
+    private func undoPurchase(of item: ShopItem) {
+        let cutoff = Date().addingTimeInterval(-PurchaseHistory.tripWindow)
+        let recent = (household?.purchases ?? [])
+            .filter { same($0.name, item.name) && ($0.date ?? .distantPast) > cutoff }
+            .max { ($0.date ?? .distantPast) < ($1.date ?? .distantPast) }
+        if let recent { ctx.delete(recent) }
+    }
+
+    func deletePurchases(_ ps: [Purchase]) {
+        ps.forEach(ctx.delete)
+        save()
+    }
+
+    // MARK: Veckomeny
+
+    func replaceMenu(with dishes: [PlannedDish]) {
+        guard let h = household else { return }
+        h.menuDishes?.forEach(ctx.delete)
+        for (i, d) in dishes.enumerated() { insertDish(d, order: i, into: h) }
+        save()
+    }
+
+    func replaceDish(_ old: MenuDish, with d: PlannedDish) {
+        guard let h = household else { return }
+        let order = Int(old.order)
+        ctx.delete(old)
+        insertDish(d, order: order, into: h)
+        save()
+    }
+
+    private func insertDish(_ d: PlannedDish, order: Int, into h: Household) {
+        let m = ctx.insert(MenuDish.self, into: h.objectID.persistentStore)
+        m.title = d.title; m.info = d.description
+        m.days = Int64(max(d.days, 1)); m.servings = Int64(d.servings); m.minutes = Int64(d.minutes)
+        m.ingredients = d.ingredients; m.steps = d.steps
+        m.order = Int64(order); m.created = Date(); m.household = h
+    }
+
+    /// Lägger rätternas ingredienser på inköpslistan (skafferivaror bara om man vill). Returnerar antal.
+    @discardableResult
+    func addIngredients(of dishes: [MenuDish], includePantry: Bool = false) -> Int {
+        var n = 0
+        for d in dishes {
+            for ing in d.ingredients where includePantry || !ing.pantry {
+                addItem(ing.name, quantity: ing.quantity)
+                n += 1
+            }
+        }
+        return n
+    }
+
+    func isBase(_ name: String?) -> Bool {
+        (household?.baseItems ?? []).contains { same($0.name, name) }
+    }
     func step(_ item: ShopItem, _ direction: Double) { item.quantity = item.quantity.stepped(direction); save() }
 
     /// Oavbockad vara på listan med samma namn eller streckkod.
@@ -313,6 +426,11 @@ final class AppModel: ObservableObject {
 
     func category(for name: String?) -> ItemCategory {
         choice(for: name)?.category.flatMap(ItemCategory.init(rawValue:)) ?? ItemCategory.guess(name)
+    }
+
+    /// Sparar kategorin om användaren valt en annan än den gissade.
+    func remember(category c: ItemCategory?, for name: String) {
+        if let c, c != category(for: name) { setCategory(c, for: name) }
     }
 
     func setCategory(_ c: ItemCategory, for name: String?) {

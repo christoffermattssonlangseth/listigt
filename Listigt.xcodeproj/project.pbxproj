@@ -12,8 +12,11 @@
 		4AD43838422CA4939D3EE823 /* ListigtApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8773F8504D4FAB5584859ABE /* ListigtApp.swift */; };
 		5523698DB5F867DA5DE1F1B2 /* Offers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 021C87DD17EDC9A7B6ACA07D /* Offers.swift */; };
 		646ADE1830B25478F578E2BD /* Quantity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F6692DA50BA47889F2FCC70 /* Quantity.swift */; };
+		A41E2F417593687865948934 /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B3D459749AF836C78F33F95 /* HistoryView.swift */; };
 		A63B1D5DCC1995AE20718265 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EDF59F27B6BF2A257BC5C48 /* AppModel.swift */; };
 		A9918D7BB56031CE25F73389 /* OffersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 279FAABF4CD365EBCA5DD42B /* OffersView.swift */; };
+		AF6CFC098874A569BE677C1C /* MenuPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0803106B78F2361D49A63830 /* MenuPlanner.swift */; };
+		B3C9C8AE0B9B2B1223E7344A /* MenuView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D77586D360498FB3325F6105 /* MenuView.swift */; };
 		E1A5A3DFF9F80931C7871968 /* ItemCategory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54B7FE7DBC77B073A6212090 /* ItemCategory.swift */; };
 		E59DE4AE41C1EBCB0178C065 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 0EF710C8A5862186D7A56CA1 /* Assets.xcassets */; };
 		F40FB5E941262C24BD4A20C2 /* Persistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 552E8CC06AC37EEA75B3D193 /* Persistence.swift */; };
@@ -21,6 +24,7 @@
 
 /* Begin PBXFileReference section */
 		021C87DD17EDC9A7B6ACA07D /* Offers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Offers.swift; sourceTree = "<group>"; };
+		0803106B78F2361D49A63830 /* MenuPlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuPlanner.swift; sourceTree = "<group>"; };
 		0EF710C8A5862186D7A56CA1 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		1FB1B386229A1D5217F31B55 /* Listigt.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Listigt.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		279FAABF4CD365EBCA5DD42B /* OffersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OffersView.swift; sourceTree = "<group>"; };
@@ -28,11 +32,13 @@
 		3C3D7F3F95CACDAA51D69C88 /* Views.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Views.swift; sourceTree = "<group>"; };
 		54B7FE7DBC77B073A6212090 /* ItemCategory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItemCategory.swift; sourceTree = "<group>"; };
 		552E8CC06AC37EEA75B3D193 /* Persistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Persistence.swift; sourceTree = "<group>"; };
+		7B3D459749AF836C78F33F95 /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
 		85C0DA7359913BE9FDC6AEE7 /* Listigt.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Listigt.entitlements; sourceTree = "<group>"; };
 		8773F8504D4FAB5584859ABE /* ListigtApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListigtApp.swift; sourceTree = "<group>"; };
 		8EDF59F27B6BF2A257BC5C48 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		B15D156805A7650B64ADE5C3 /* Barcode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Barcode.swift; sourceTree = "<group>"; };
 		C05EDED70569E08412C41C3C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		D77586D360498FB3325F6105 /* MenuView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -42,10 +48,13 @@
 				8EDF59F27B6BF2A257BC5C48 /* AppModel.swift */,
 				0EF710C8A5862186D7A56CA1 /* Assets.xcassets */,
 				B15D156805A7650B64ADE5C3 /* Barcode.swift */,
+				7B3D459749AF836C78F33F95 /* HistoryView.swift */,
 				C05EDED70569E08412C41C3C /* Info.plist */,
 				54B7FE7DBC77B073A6212090 /* ItemCategory.swift */,
 				85C0DA7359913BE9FDC6AEE7 /* Listigt.entitlements */,
 				8773F8504D4FAB5584859ABE /* ListigtApp.swift */,
+				0803106B78F2361D49A63830 /* MenuPlanner.swift */,
+				D77586D360498FB3325F6105 /* MenuView.swift */,
 				021C87DD17EDC9A7B6ACA07D /* Offers.swift */,
 				279FAABF4CD365EBCA5DD42B /* OffersView.swift */,
 				552E8CC06AC37EEA75B3D193 /* Persistence.swift */,
@@ -144,8 +153,11 @@
 			files = (
 				A63B1D5DCC1995AE20718265 /* AppModel.swift in Sources */,
 				4149C9EDD74A29943E958B04 /* Barcode.swift in Sources */,
+				A41E2F417593687865948934 /* HistoryView.swift in Sources */,
 				E1A5A3DFF9F80931C7871968 /* ItemCategory.swift in Sources */,
 				4AD43838422CA4939D3EE823 /* ListigtApp.swift in Sources */,
+				AF6CFC098874A569BE677C1C /* MenuPlanner.swift in Sources */,
+				B3C9C8AE0B9B2B1223E7344A /* MenuView.swift in Sources */,
 				5523698DB5F867DA5DE1F1B2 /* Offers.swift in Sources */,
 				A9918D7BB56031CE25F73389 /* OffersView.swift in Sources */,
 				F40FB5E941262C24BD4A20C2 /* Persistence.swift in Sources */,

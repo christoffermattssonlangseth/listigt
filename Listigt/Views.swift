@@ -5,7 +5,8 @@ struct ContentView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.scenePhase) private var scenePhase
     @State private var tab = ProcessInfo.processInfo.arguments.contains("-baseTab") ? 1
-        : ProcessInfo.processInfo.arguments.contains("-offersTab") ? 2 : 0
+        : ProcessInfo.processInfo.arguments.contains("-offersTab") ? 2
+        : ProcessInfo.processInfo.arguments.contains("-menuTab") ? 3 : 0
 
     var body: some View {
         Group {
@@ -14,9 +15,12 @@ struct ContentView: View {
                     ShoppingListView(household: h)
                         .tabItem { Label("Inköpslista", systemImage: "cart") }
                         .tag(0)
-                    BaseListView(household: h)
-                        .tabItem { Label("Basvaror", systemImage: "star") }
+                    MyItemsView(household: h)
+                        .tabItem { Label("Mina varor", systemImage: "star") }
                         .tag(1)
+                    MenuView(household: h)
+                        .tabItem { Label("Veckomeny", systemImage: "fork.knife") }
+                        .tag(3)
                     OffersView()
                         .tabItem { Label("Erbjudanden", systemImage: "tag") }
                         .tag(2)
@@ -46,7 +50,10 @@ struct ContentView: View {
 private struct AddRow: View {
     let placeholder: String
     @Binding var text: String
+    /// Retur: lägg till direkt.
     let onSubmit: () -> Void
+    /// Plusknappen: öppna produktkortet.
+    let onDetails: () -> Void
     let onScan: () -> Void
     var suggestions: [String] = []
     @FocusState private var focused: Bool
@@ -65,7 +72,7 @@ private struct AddRow: View {
                     .focused($focused)
                     .submitLabel(.done)
                     .onSubmit {
-                        // Tom rad + retur stänger tangentbordet, annars fortsätt skriva nästa vara.
+                        // Retur lägger till direkt och låter en skriva nästa vara. Tom rad stänger tangentbordet.
                         if text.trimmingCharacters(in: .whitespaces).isEmpty { focused = false }
                         else { onSubmit(); focused = true }
                     }
@@ -75,9 +82,10 @@ private struct AddRow: View {
                             Button("Klar") { focused = false }
                         }
                     }
-                Button(action: { onSubmit(); focused = true }) {
+                Button(action: { focused = false; onDetails() }) {
                     Image(systemName: "plus.circle.fill").font(.title2)
                 }
+                .accessibilityLabel("Lägg till med mängd och kategori")
                 .disabled(text.trimmingCharacters(in: .whitespaces).isEmpty)
                 Button(action: onScan) {
                     Image(systemName: "barcode.viewfinder").font(.title2)
@@ -105,6 +113,7 @@ private struct AddRow: View {
 
 struct ShoppingListView: View {
     @EnvironmentObject private var model: AppModel
+    @EnvironmentObject private var offerStore: OfferStore
     @FetchRequest private var items: FetchedResults<ShopItem>
     let household: Household
 
@@ -112,6 +121,7 @@ struct ShoppingListView: View {
     @State private var scanning = false
     @State private var pendingEan: String?
     @State private var toast: String?
+    @State private var draft: Draft?
 
     init(household: Household) {
         self.household = household
@@ -133,8 +143,8 @@ struct ShoppingListView: View {
         NavigationStack {
             List {
                 Section {
-                    AddRow(placeholder: "Lägg till vara…", text: $text, onSubmit: submit,
-                           onScan: { scanning = true }, suggestions: suggestions)
+                    AddRow(placeholder: "Lägg till vara…", text: $text, onSubmit: quickAdd,
+                           onDetails: submit, onScan: { scanning = true }, suggestions: suggestions)
                 }
 
                 if toBuy.isEmpty {
@@ -206,12 +216,40 @@ struct ShoppingListView: View {
                 model.addItem(e.name, ean: ean, quantity: e.quantity)
                 show("\(e.name) tillagd")
             }
+            .sheet(item: $draft) { d in
+                ProductSheet(
+                    initial: d.edit,
+                    saveLabel: "Lägg till",
+                    showDelete: false,
+                    message: model.openItem(named: d.edit.name, ean: nil).map {
+                        "Står redan på listan (\($0.quantity.text)) – mängden läggs till."
+                    },
+                    categoryFor: { model.category(for: $0) },
+                    offers: offerStore.matches(for: d.edit.name),
+                    onSave: { e in
+                        model.remember(category: e.category, for: e.name)
+                        model.addItem(e.name, quantity: e.quantity)
+                        show("\(e.name) tillagd")
+                    },
+                    onDelete: {})
+            }
         }
     }
 
     private func submit() {
         let v = text.trimmingCharacters(in: .whitespaces)
         text = ""
+        guard !v.isEmpty else { return }
+        if EAN.isValid(v) { pendingEan = v; return }
+        let parsed = QuantityParser.parse(v)
+        draft = Draft(edit: ProductEdit(name: parsed.name, quantity: parsed.quantity ?? .one,
+                                        category: model.category(for: parsed.name), intervalDays: nil))
+    }
+
+    private func quickAdd() {
+        let v = text.trimmingCharacters(in: .whitespaces)
+        text = ""
+        guard !v.isEmpty else { return }
         if EAN.isValid(v) { pendingEan = v; return }
         let parsed = QuantityParser.parse(v)
         model.addItem(parsed.name, quantity: parsed.quantity)
@@ -307,6 +345,12 @@ private struct ItemRow: View {
     }
 }
 
+/// En inskriven vara som väntar på att bekräftas i produktkortet.
+struct Draft: Identifiable {
+    let id = UUID()
+    var edit: ProductEdit
+}
+
 struct ProductEdit {
     var name: String
     var quantity: Quantity
@@ -394,7 +438,7 @@ struct ProductSheet: View {
                         .accessibilityLabel("Öka")
                     }
                     .buttonStyle(.borderless)
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 5), spacing: 8) {
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 8) {
                         ForEach(MeasureUnit.allCases) { u in
                             Button { changeUnit(to: u) } label: {
                                 Text(u.label)
@@ -489,6 +533,7 @@ struct BaseListView: View {
 
     @State private var text = ""
     @State private var scanning = false
+    @State private var draft: Draft?
     @State private var pendingEan: String?
     @State private var toast: String?
 
@@ -501,12 +546,11 @@ struct BaseListView: View {
     }
 
     var body: some View {
-        NavigationStack {
             List {
                 Section {
-                    AddRow(placeholder: "Ny basvara…", text: $text, onSubmit: submit, onScan: { scanning = true })
+                    AddRow(placeholder: "Ny basvara…", text: $text, onSubmit: quickAdd, onDetails: submit, onScan: { scanning = true })
                 } footer: {
-                    Text("Basvaror läggs automatiskt på inköpslistan. Tryck på intervallet för att välja hur ofta. Håll inne en vara för att byta kategori.")
+                    Text("Retur lägger till direkt, ＋ öppnar kortet med mängd och intervall. Basvaror läggs automatiskt på inköpslistan. Tryck på intervallet för att välja hur ofta. Håll inne en vara för att byta kategori.")
                 }
 
                 ForEach(model.grouped(Array(bases), name: \.name), id: \.0) { cat, group in
@@ -516,10 +560,8 @@ struct BaseListView: View {
                     }
                 }
             }
-            .navigationTitle("Basvaror")
             .scrollDismissesKeyboard(.interactively)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) { ShareButton() }
                 if !bases.isEmpty { ToolbarItem(placement: .topBarTrailing) { EditButton() } }
             }
             .overlay(alignment: .bottom) { ToastView(text: toast) }
@@ -527,12 +569,35 @@ struct BaseListView: View {
                 show(model.addBase(e.name, ean: ean, intervalDays: e.intervalDays ?? 0, quantity: e.quantity)
                      ?? "\(e.name) tillagd som basvara")
             }
-        }
+            .sheet(item: $draft) { d in
+                ProductSheet(
+                    initial: d.edit,
+                    saveLabel: "Lägg till",
+                    showDelete: false,
+                    categoryFor: { model.category(for: $0) },
+                    onSave: { e in
+                        model.remember(category: e.category, for: e.name)
+                        show(model.addBase(e.name, intervalDays: e.intervalDays ?? 0, quantity: e.quantity)
+                             ?? "\(e.name) tillagd som basvara")
+                    },
+                    onDelete: {})
+            }
     }
 
     private func submit() {
         let v = text.trimmingCharacters(in: .whitespaces)
         text = ""
+        guard !v.isEmpty else { return }
+        if EAN.isValid(v) { pendingEan = v; return }
+        let parsed = QuantityParser.parse(v)
+        draft = Draft(edit: ProductEdit(name: parsed.name, quantity: parsed.quantity ?? .one,
+                                        category: model.category(for: parsed.name), intervalDays: 0))
+    }
+
+    private func quickAdd() {
+        let v = text.trimmingCharacters(in: .whitespaces)
+        text = ""
+        guard !v.isEmpty else { return }
         if EAN.isValid(v) { pendingEan = v; return }
         let parsed = QuantityParser.parse(v)
         if let msg = model.addBase(parsed.name, quantity: parsed.quantity) { show(msg) }
@@ -622,7 +687,7 @@ private struct CategoryMenu: View {
 
 // MARK: - Småbitar
 
-private struct ShareButton: View {
+struct ShareButton: View {
     @EnvironmentObject private var model: AppModel
     var body: some View {
         Button { model.presentSharing() } label: {
@@ -637,7 +702,7 @@ private struct ShareButton: View {
     }
 }
 
-private struct ToastView: View {
+struct ToastView: View {
     let text: String?
     var body: some View {
         if let text {

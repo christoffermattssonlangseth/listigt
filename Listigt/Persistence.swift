@@ -16,6 +16,8 @@ final class Household: NSManagedObject {
     @NSManaged var baseItems: Set<BaseItem>?
     @NSManaged var eanNames: Set<EanName>?
     @NSManaged var categoryChoices: Set<CategoryChoice>?
+    @NSManaged var purchases: Set<Purchase>?
+    @NSManaged var menuDishes: Set<MenuDish>?
 }
 
 @objc(ShopItem)
@@ -35,7 +37,7 @@ final class ShopItem: NSManagedObject, Identifiable {
 extension ShopItem {
     var quantity: Quantity {
         get {
-            if let u = unit.flatMap(MeasureUnit.init(rawValue:)), u != .st, amount > 0 {
+            if let u = MeasureUnit(stored: unit), amount > 0 {
                 return Quantity(amount: amount, unit: u)
             }
             return Quantity(amount: Double(max(qty, 1)), unit: .st)
@@ -69,7 +71,7 @@ extension BaseItem {
     var quantity: Quantity {
         get {
             guard amount > 0 else { return .one }
-            return Quantity(amount: amount, unit: unit.flatMap(MeasureUnit.init(rawValue:)) ?? .st)
+            return Quantity(amount: amount, unit: MeasureUnit(stored: unit) ?? .st)
         }
         set {
             if newValue.isOne { amount = 0; unit = nil }
@@ -90,6 +92,40 @@ final class EanName: NSManagedObject {
 final class CategoryChoice: NSManagedObject {
     @NSManaged var key: String?
     @NSManaged var category: String?
+    @NSManaged var household: Household?
+}
+
+/// En avbockad vara. Köptillfällen räknas fram ur tidpunkterna (se PurchaseHistory),
+/// så två telefoner som handlar samtidigt hamnar i samma tillfälle utan konflikter.
+@objc(Purchase)
+final class Purchase: NSManagedObject, Identifiable {
+    @NSManaged var name: String?
+    @NSManaged var ean: String?
+    @NSManaged var amount: Double
+    @NSManaged var unit: String?
+    @NSManaged var date: Date?
+    @NSManaged var household: Household?
+}
+
+extension Purchase {
+    var quantity: Quantity {
+        get { amount > 0 ? Quantity(amount: amount, unit: MeasureUnit(stored: unit) ?? .st) : .one }
+        set { amount = newValue.amount; unit = newValue.unit.rawValue }
+    }
+}
+
+/// En rätt i veckomenyn. Ingredienser och steg sparas som JSON (se MenuPlanner).
+@objc(MenuDish)
+final class MenuDish: NSManagedObject, Identifiable {
+    @NSManaged var title: String?
+    @NSManaged var info: String?
+    @NSManaged var days: Int64
+    @NSManaged var servings: Int64
+    @NSManaged var minutes: Int64
+    @NSManaged var ingredientsJSON: String?
+    @NSManaged var stepsJSON: String?
+    @NSManaged var order: Int64
+    @NSManaged var created: Date?
     @NSManaged var household: Household?
 }
 
@@ -136,14 +172,18 @@ enum Model {
         let base = entity("BaseItem")
         let ean = entity("EanName")
         let choice = entity("CategoryChoice")
+        let purchase = entity("Purchase")
+        let dish = entity("MenuDish")
 
         let (hItems, iHouse) = link(household, "items", item)
         let (hBase, bHouse) = link(household, "baseItems", base)
         let (hEans, eHouse) = link(household, "eanNames", ean)
         let (hChoices, cHouse) = link(household, "categoryChoices", choice)
+        let (hPurchases, pHouse) = link(household, "purchases", purchase)
+        let (hDishes, dHouse) = link(household, "menuDishes", dish)
 
         household.properties = [attr("name", .stringAttributeType), attr("created", .dateAttributeType),
-                                hItems, hBase, hEans, hChoices]
+                                hItems, hBase, hEans, hChoices, hPurchases, hDishes]
         item.properties = [attr("name", .stringAttributeType), attr("qty", .integer64AttributeType, 1),
                            attr("ean", .stringAttributeType), attr("checked", .booleanAttributeType, false),
                            attr("fromBase", .booleanAttributeType, false), attr("created", .dateAttributeType),
@@ -156,9 +196,17 @@ enum Model {
                            attr("amount", .doubleAttributeType, 0.0), attr("unit", .stringAttributeType), bHouse]
         ean.properties = [attr("ean", .stringAttributeType), attr("name", .stringAttributeType), eHouse]
         choice.properties = [attr("key", .stringAttributeType), attr("category", .stringAttributeType), cHouse]
+        purchase.properties = [attr("name", .stringAttributeType), attr("ean", .stringAttributeType),
+                               attr("amount", .doubleAttributeType, 0.0), attr("unit", .stringAttributeType),
+                               attr("date", .dateAttributeType), pHouse]
+        dish.properties = [attr("title", .stringAttributeType), attr("info", .stringAttributeType),
+                           attr("days", .integer64AttributeType, 1), attr("servings", .integer64AttributeType, 2),
+                           attr("minutes", .integer64AttributeType, 0),
+                           attr("ingredientsJSON", .stringAttributeType), attr("stepsJSON", .stringAttributeType),
+                           attr("order", .integer64AttributeType, 0), attr("created", .dateAttributeType), dHouse]
 
         let model = NSManagedObjectModel()
-        model.entities = [household, item, base, ean, choice]
+        model.entities = [household, item, base, ean, choice, purchase, dish]
         return model
     }()
 }

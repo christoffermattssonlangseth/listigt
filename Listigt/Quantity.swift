@@ -1,16 +1,22 @@
 import Foundation
 
 enum MeasureUnit: String, CaseIterable, Identifiable {
-    case st, forp, g, hg, kg, ml, cl, dl, l
+    case st, g, hg, kg, ml, cl, dl, l
 
     var id: String { rawValue }
 
-    var label: String { self == .forp ? "förp" : rawValue }
+    var label: String { rawValue }
+
+    /// Läser sparad enhet. "forp" fanns förr och räknas nu som st.
+    init?(stored: String?) {
+        guard let stored else { return nil }
+        self.init(rawValue: stored == "forp" ? "st" : stored)
+    }
 
     /// Steg för −/+.
     var step: Double {
         switch self {
-        case .st, .forp, .hg, .dl, .cl: 1
+        case .st, .hg, .dl, .cl: 1
         case .g, .ml: 50
         case .kg, .l: 0.5
         }
@@ -64,7 +70,7 @@ struct Quantity: Equatable {
 enum QuantityParser {
     private static let unitWords: [String: MeasureUnit] = [
         "st": .st, "stycken": .st, "styck": .st, "x": .st,
-        "förp": .forp, "förpackning": .forp, "förpackningar": .forp, "paket": .forp, "pkt": .forp,
+        "förp": .st, "förpackning": .st, "förpackningar": .st, "paket": .st, "pkt": .st,
         "g": .g, "gr": .g, "gram": .g, "hg": .hg, "kg": .kg, "kilo": .kg,
         "ml": .ml, "cl": .cl, "dl": .dl, "l": .l, "liter": .l,
     ]
