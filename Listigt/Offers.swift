@@ -185,7 +185,7 @@ struct WillysProvider: OfferProvider {
 struct ICAProvider: OfferProvider {
     private static let api = "https://apim-pub.gw.ica.se/sverige/digx"
 
-    private actor TokenCache {
+    actor TokenCache {
         var token: String?
         var expires = Date.distantPast
         func get() async throws -> String {
@@ -198,7 +198,7 @@ struct ICAProvider: OfferProvider {
             return t
         }
     }
-    private static let tokens = TokenCache()
+    static let tokens = TokenCache()
 
     private func get(_ url: URL) async throws -> Any {
         let token = try await Self.tokens.get()

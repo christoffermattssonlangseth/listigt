@@ -25,6 +25,7 @@ final class AppModel: ObservableObject {
             Task { @MainActor in self?.refresh() }
         }
         refresh()
+        removeFinishedTripItems()
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-demo"), (household?.items ?? []).isEmpty {
             ["Mjölk", "Bröd", "Ägg", "Smör"].forEach { addBase($0) }
@@ -143,7 +144,7 @@ final class AppModel: ObservableObject {
         let store = dst.objectID.persistentStore
         for i in src.items ?? [] where !(dst.items ?? []).contains(where: { same($0.name, i.name) }) {
             let n = ctx.insert(ShopItem.self, into: store)
-            n.name = i.name; n.quantity = i.quantity; n.ean = i.ean; n.checked = i.checked
+            n.name = i.name; n.quantity = i.quantity; n.ean = i.ean; n.checked = i.checked; n.checkedAt = i.checkedAt
             n.fromBase = i.fromBase; n.created = i.created; n.household = dst
         }
         for b in src.baseItems ?? [] where !(dst.baseItems ?? []).contains(where: { same($0.name, b.name) }) {
@@ -176,6 +177,7 @@ final class AppModel: ObservableObject {
         if let ex = (h.items ?? []).first(where: { matches($0.name, $0.ean, name, ean) }) {
             if ex.checked {
                 ex.checked = false
+                ex.checkedAt = nil
                 if let quantity { ex.quantity = quantity }
             } else {
                 ex.quantity = quantity.map { ex.quantity.adding($0) } ?? ex.quantity.stepped(1)
@@ -195,6 +197,7 @@ final class AppModel: ObservableObject {
 
     func toggle(_ item: ShopItem) {
         item.checked.toggle()
+        item.checkedAt = item.checked ? Date() : nil
         if item.checked { recordPurchase(of: item) } else { undoPurchase(of: item) }
         save()
     }
@@ -248,6 +251,7 @@ final class AppModel: ObservableObject {
         m.days = Int64(max(d.days, 1)); m.servings = Int64(d.servings); m.minutes = Int64(d.minutes)
         m.ingredients = d.ingredients; m.steps = d.steps
         m.order = Int64(order); m.created = Date(); m.household = h
+        m.recipeId = Int64(d.recipeId); m.url = d.url; m.imageURL = d.imageURL
     }
 
     /// Lägger rätternas ingredienser på inköpslistan (skafferivaror bara om man vill). Returnerar antal.
@@ -305,6 +309,25 @@ final class AppModel: ObservableObject {
         objectWillChange.send()
     }
     func delete(_ items: [ShopItem]) { items.forEach(ctx.delete); save() }
+
+    /// Tar bort avbockade varor vars köptillfälle är slut (två timmar efter tillfällets första avbockning).
+    func removeFinishedTripItems(now: Date = Date()) {
+        guard let h = household else { return }
+        let checked = (h.items ?? []).filter { $0.checked && !$0.isDeleted }
+        guard !checked.isEmpty else { return }
+        let starts = PurchaseHistory.trips(Array(h.purchases ?? [])).map(\.start)   // nyaste först
+        let window = PurchaseHistory.tripWindow
+        let done = checked.filter { it in
+            guard let at = it.checkedAt else {
+                // Avbockad innan tiden sparades: städa när inget tillfälle pågår.
+                return starts.first.map { now.timeIntervalSince($0) > window } ?? true
+            }
+            let start = starts.first { $0 <= at && at.timeIntervalSince($0) <= window } ?? at
+            return now.timeIntervalSince(start) > window
+        }
+        guard !done.isEmpty else { return }
+        delete(Array(done))
+    }
 
     func clearChecked() {
         delete((household?.items ?? []).filter(\.checked))

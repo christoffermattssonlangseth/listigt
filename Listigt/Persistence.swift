@@ -26,6 +26,8 @@ final class ShopItem: NSManagedObject, Identifiable {
     @NSManaged var qty: Int64
     @NSManaged var ean: String?
     @NSManaged var checked: Bool
+    /// När varan bockades av (för att städa bort den när köptillfället är slut).
+    @NSManaged var checkedAt: Date?
     @NSManaged var fromBase: Bool
     @NSManaged var created: Date?
     /// Mängd för andra enheter än st (st ligger i qty för bakåtkompatibilitet).
@@ -126,6 +128,10 @@ final class MenuDish: NSManagedObject, Identifiable {
     @NSManaged var stepsJSON: String?
     @NSManaged var order: Int64
     @NSManaged var created: Date?
+    /// ICA:s recept-id, länk och bild.
+    @NSManaged var recipeId: Int64
+    @NSManaged var url: String?
+    @NSManaged var imageURL: String?
     @NSManaged var household: Household?
 }
 
@@ -186,6 +192,7 @@ enum Model {
                                 hItems, hBase, hEans, hChoices, hPurchases, hDishes]
         item.properties = [attr("name", .stringAttributeType), attr("qty", .integer64AttributeType, 1),
                            attr("ean", .stringAttributeType), attr("checked", .booleanAttributeType, false),
+                           attr("checkedAt", .dateAttributeType),
                            attr("fromBase", .booleanAttributeType, false), attr("created", .dateAttributeType),
                            attr("amount", .doubleAttributeType, 0.0), attr("unit", .stringAttributeType),
                            iHouse]
@@ -203,7 +210,9 @@ enum Model {
                            attr("days", .integer64AttributeType, 1), attr("servings", .integer64AttributeType, 2),
                            attr("minutes", .integer64AttributeType, 0),
                            attr("ingredientsJSON", .stringAttributeType), attr("stepsJSON", .stringAttributeType),
-                           attr("order", .integer64AttributeType, 0), attr("created", .dateAttributeType), dHouse]
+                           attr("order", .integer64AttributeType, 0), attr("created", .dateAttributeType),
+                           attr("recipeId", .integer64AttributeType, 0), attr("url", .stringAttributeType),
+                           attr("imageURL", .stringAttributeType), dHouse]
 
         let model = NSManagedObjectModel()
         model.entities = [household, item, base, ean, choice, purchase, dish]

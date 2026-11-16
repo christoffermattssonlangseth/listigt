@@ -32,8 +32,16 @@ struct ContentView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
+                model.removeFinishedTripItems()
                 model.addDueBaseItems()
                 Task { await OfferStore.shared.refreshAll() }
+            }
+        }
+        .task {
+            // Städa även medan appen står öppen.
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(60))
+                model.removeFinishedTripItems()
             }
         }
         .alert("Något gick fel", isPresented: Binding(

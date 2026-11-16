@@ -9,13 +9,12 @@ struct MenuView: View {
     @AppStorage("menu.people") private var people = 2
     @AppStorage("menu.days") private var days = 5
     @AppStorage("menu.dishes") private var dishCount = 5
-    @AppStorage("menu.wishes") private var wishes = ""
+    @AppStorage("menu.quick") private var quick = false
+    @AppStorage("menu.vegetarian") private var vegetarian = false
     /// "" = alla butiker, annars en kedjas rawValue.
     @AppStorage("menu.chain") private var chainRaw = ""
 
-    @State private var hasKey = APIKey.value != nil
     @State private var showSettings = false
-    @State private var showKey = false
     @State private var working = false
     @State private var replacing: NSManagedObjectID?
     @State private var error: String?
@@ -31,14 +30,14 @@ struct MenuView: View {
     private var offers: [Offer] { MenuPlanner.foodOffers(from: chain) }
 
     private var request: MenuRequest {
-        MenuRequest(people: people, days: days, dishes: min(dishCount, days), wishes: wishes)
+        MenuRequest(people: people, days: days, dishes: min(dishCount, days), quick: quick, vegetarian: vegetarian)
     }
 
     var body: some View {
         NavigationStack {
             Group {
                 if dishes.isEmpty && !working {
-                    if hasKey { settingsForm(inSheet: false) } else { KeyForm { hasKey = APIKey.value != nil } }
+                    settingsForm(inSheet: false)
                 } else {
                     menuList
                 }
@@ -46,10 +45,6 @@ struct MenuView: View {
             .navigationTitle("Veckomeny")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button { showKey = true } label: { Image(systemName: "key") }
-                        .accessibilityLabel("API-nyckel")
-                }
                 if !dishes.isEmpty {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button("Ny meny") { showSettings = true }.disabled(working)
@@ -65,14 +60,6 @@ struct MenuView: View {
                 }
                 .presentationDetents([.large])
             }
-            .sheet(isPresented: $showKey) {
-                NavigationStack {
-                    KeyForm { hasKey = APIKey.value != nil; showKey = false }
-                        .navigationTitle("API-nyckel")
-                        .navigationBarTitleDisplayMode(.inline)
-                        .toolbar { Button("Stäng") { hasKey = APIKey.value != nil; showKey = false } }
-                }
-            }
             .sheet(item: $open) { d in
                 DishDetail(dish: d, replacing: replacing == d.objectID,
                            onAdd: { pantry in
@@ -85,7 +72,18 @@ struct MenuView: View {
                 Button("OK", role: .cancel) {}
             } message: { Text(error ?? "") }
             .overlay(alignment: .bottom) { ToastText(text: toast) }
-            .task { await offerStore.refreshAll() }
+            .task {
+                await offerStore.refreshAll()
+                #if DEBUG
+                if ProcessInfo.processInfo.arguments.contains("-planMenu") {
+                    await generate()
+                    for d in dishes {
+                        log("RÄTT \(d.title ?? "") – \(d.days) d, \(d.servings) port, \(d.minutes) min")
+                        for i in d.ingredients { log("   \(i.name) | \(i.amountText)\(i.pantry ? " [skafferi]" : "")\(i.offer.isEmpty ? "" : " 🏷️ " + i.offer)") }
+                    }
+                }
+                #endif
+            }
         }
     }
 
@@ -118,8 +116,8 @@ struct MenuView: View {
                 }
             }
             Section("Önskemål") {
-                TextField("T.ex. barnvänligt, en vegetarisk, inget fläsk", text: $wishes, axis: .vertical)
-                    .lineLimit(1...3)
+                Toggle("Snabba rätter (max 30 min)", isOn: $quick)
+                Toggle("Vegetariskt", isOn: $vegetarian)
             }
             Section {
                 Button {
@@ -134,7 +132,7 @@ struct MenuView: View {
                 .disabled(working)
             } footer: {
                 let n = offers.count
-                Text(n > 0 ? "Claude utgår från \(n) erbjudanden \(chain.map { "på \($0.title)" } ?? "hos dina butiker"). Det tar ungefär en halv minut."
+                Text(n > 0 ? "Recepten kommer från ICA och väljs efter \(n) erbjudanden \(chain.map { "på \($0.title)" } ?? "hos dina butiker")."
                            : "Inga erbjudanden hämtade – välj butiker under Erbjudanden för billigare förslag.")
             }
         }
@@ -148,7 +146,7 @@ struct MenuView: View {
                 Section {
                     HStack(spacing: 12) {
                         ProgressView()
-                        Text("Claude planerar veckans middagar…").foregroundStyle(.secondary)
+                        Text("Letar recept med veckans erbjudanden…").foregroundStyle(.secondary)
                     }
                 }
             }
@@ -168,6 +166,10 @@ struct MenuView: View {
                     Text("Tryck på en rätt för recept. Svep för att byta ut den.")
                 }
                 Section {
+                    Button { Task { await generate() } } label: {
+                        Label("Slumpa nya recept", systemImage: "dice")
+                    }
+                    .disabled(working)
                     Button {
                         let n = model.addIngredients(of: Array(dishes))
                         show("\(n) varor lagda på listan")
@@ -181,13 +183,19 @@ struct MenuView: View {
         }
     }
 
-    // MARK: Claude
+    // MARK: Planering
 
     private func generate() async {
         working = true
         defer { working = false }
         do {
-            let planned = try await MenuPlanner.plan(request, offers: offers)
+            let days = MenuPlanner.split(days: request.days, into: request.dishes)
+            // Undvik recepten i nuvarande meny; räcker det inte får de vara med igen.
+            let current = Set(dishes.map { Int($0.recipeId) })
+            var planned = (try? await MenuPlanner.plan(request, offers: offers, days: days, avoid: current)) ?? []
+            if planned.count < days.count {
+                planned = try await MenuPlanner.plan(request, offers: offers, days: days)
+            }
             model.replaceMenu(with: planned)
         } catch {
             self.error = error.localizedDescription
@@ -199,12 +207,9 @@ struct MenuView: View {
         working = true
         replacing = d.objectID
         defer { working = false; replacing = nil }
-        var req = request
-        req.days = Int(d.days)
-        req.dishes = 1
         do {
-            let others = dishes.compactMap(\.title)
-            if let new = try await MenuPlanner.plan(req, offers: offers, avoid: others, single: true).first {
+            let avoid = Set(dishes.map { Int($0.recipeId) })
+            if let new = try await MenuPlanner.plan(request, offers: offers, days: [Int(d.days)], avoid: avoid).first {
                 model.replaceDish(d, with: new)
             }
         } catch {
@@ -262,6 +267,13 @@ private struct DishDetail: View {
         NavigationStack {
             List {
                 Section {
+                    if let img = dish.imageURL.flatMap(URL.init(string:)) {
+                        AsyncImage(url: img) { $0.resizable().scaledToFill() } placeholder: { Color.secondary.opacity(0.1) }
+                            .frame(height: 200)
+                            .frame(maxWidth: .infinity)
+                            .clipped()
+                            .listRowInsets(EdgeInsets())
+                    }
                     if let info = dish.info, !info.isEmpty { Text(info) }
                     HStack(spacing: 14) {
                         Label("\(dish.servings) portioner", systemImage: "person.2")
@@ -280,7 +292,7 @@ private struct DishDetail: View {
                                 }
                             }
                             Spacer()
-                            Text(ing.quantity?.text ?? "efter smak").foregroundStyle(.secondary).monospacedDigit()
+                            Text(ing.amountText).foregroundStyle(.secondary).monospacedDigit()
                         }
                     }
                 }
@@ -305,6 +317,9 @@ private struct DishDetail: View {
                     }
                 }
                 Section {
+                    if let url = dish.url.flatMap(URL.init(string:)) {
+                        Link(destination: url) { Label("Visa receptet på ica.se", systemImage: "safari") }
+                    }
                     Button(action: onReplace) {
                         Label("Byt ut rätten", systemImage: "arrow.triangle.2.circlepath")
                     }
@@ -314,42 +329,6 @@ private struct DishDetail: View {
             .navigationTitle(dish.title ?? "")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { Button("Klar") { dismiss() } }
-        }
-    }
-}
-
-// MARK: - API-nyckel
-
-private struct KeyForm: View {
-    let onSaved: () -> Void
-    @State private var key = ""
-
-    var body: some View {
-        Form {
-            Section {
-                Text("Veckomenyn skapas av Claude. Det kräver en API-nyckel från Anthropic. En meny kostar ungefär en krona.")
-                Link("Skaffa nyckel på console.anthropic.com", destination: URL(string: "https://console.anthropic.com/settings/keys")!)
-            }
-            Section {
-                SecureField("sk-ant-…", text: $key)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                Button("Spara nyckel") {
-                    APIKey.save(key.trimmingCharacters(in: .whitespacesAndNewlines))
-                    key = ""
-                    onSaved()
-                }
-                .disabled(key.trimmingCharacters(in: .whitespaces).isEmpty)
-            } footer: {
-                Text(APIKey.value != nil
-                     ? "En nyckel är sparad. Klistra in en ny för att byta."
-                     : "Nyckeln sparas bara i nyckelringen på den här telefonen. Menyn delas ändå med alla som delar listan.")
-            }
-            if APIKey.value != nil {
-                Section {
-                    Button("Ta bort nyckel", role: .destructive) { APIKey.save(nil); onSaved() }
-                }
-            }
         }
     }
 }
